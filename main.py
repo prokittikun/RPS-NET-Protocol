@@ -18,7 +18,7 @@ MSG_GAME_ACTION = 4
 MSG_GAME_RESULT = 5
 MSG_LIST_ROOMS = 6
 MSG_JOIN_ROOM = 7
-
+MSG_PLAYER_QUIT = 8
 # เกม Rock Paper Scissors
 GAME_CHOICES = ['rock', 'paper', 'scissors']
 
@@ -55,7 +55,7 @@ def list_and_choose_room(sock):
     available_rooms = response.split(',')
     if not available_rooms or available_rooms[0] == '':
         print("No available rooms. Creating a new room.")
-        return None
+        return "create"
 
     print("Available rooms:")
     for room in available_rooms:
@@ -64,9 +64,9 @@ def list_and_choose_room(sock):
     while True:
         choice = input("Enter room number to join, or press Enter to create a new room: ")
         if choice == "":
-            return None
+            return "create"
         if choice in available_rooms:
-            return int(choice)
+            return choice
         print("Invalid room number. Please try again.")
 
 def play_game(sock):
@@ -86,12 +86,42 @@ def play_game(sock):
     while True:
         action = input("Enter your choice (rock/paper/scissors) or 'quit' to exit: ")
         if action.lower() == 'quit':
+            send_message(sock, MSG_PLAYER_QUIT, "")
             break
         if action in GAME_CHOICES:
             version, resp_type, response = send_message(sock, MSG_GAME_ACTION, action)
-            print(f"Game result: {response}")
+            if resp_type == MSG_NORMAL:
+                print(response)  # "Waiting for other player's choice..."
+                print("Waiting for the result...")
+                # รอผลลัพธ์จากเซิร์ฟเวอร์
+                version, resp_type, result = receive_message(sock)
+                if resp_type == MSG_GAME_RESULT:
+                    print(result)
+                    continue_play = input("Do you want to play another round? (y/n): ")
+                    if continue_play.lower() != 'y':
+                        send_message(sock, MSG_PLAYER_QUIT, "")
+                        break
+                elif resp_type == MSG_NORMAL:
+                    print(result)  # อาจจะเป็นข้อความว่าผู้เล่นอีกคนออกจากเกม
+                    wait_new_player = input("Do you want to wait for a new player? (y/n): ")
+                    if wait_new_player.lower() != 'y':
+                        send_message(sock, MSG_PLAYER_QUIT, "")
+                        break
+            elif resp_type == MSG_GAME_RESULT:
+                print(response)
+                continue_play = input("Do you want to play another round? (y/n): ")
+                if continue_play.lower() != 'y':
+                    send_message(sock, MSG_PLAYER_QUIT, "")
+                    break
         else:
             print("Invalid choice. Please choose rock, paper, or scissors.")
+    print("You have left the game.")
+
+def receive_message(sock):
+    header_data = sock.recv(HEADER_SIZE)
+    version, message_type, payload_length = parse_header(header_data)
+    payload = sock.recv(payload_length).decode()
+    return version, message_type, payload
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -106,21 +136,13 @@ def main():
                     print("Login failed. Please try again.")
             
             print("You are now logged in!")
-            
             room_choice = list_and_choose_room(s)
-            if room_choice:
-                version, resp_type, response = send_message(s, MSG_JOIN_ROOM, str(room_choice))
-            else:
-                version, resp_type, response = send_message(s, MSG_GAME_ACTION, "create")
-            
+            version, resp_type, response = send_message(s, MSG_JOIN_ROOM, str(room_choice))
+
             print(response)
-            
-            if "Joined room" in response:
+
+            if "Joined room" in response or "Created and joined room" in response:
                 print(response)
-                play_game(s)
-            elif "created" in response:
-                print(response)
-                print("Waiting for another player to join...")
                 play_game(s)
             else:
                 print("Failed to join or create a room.")
