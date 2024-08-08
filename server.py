@@ -2,46 +2,64 @@ import socket
 import struct
 import csv
 import threading
-import random
+import var as v
 
 # การกำหนดค่าเซิร์ฟเวอร์
 HOST = '127.0.0.1'
 PORT = 12345
 
 # กำหนดโครงสร้าง header
-HEADER_FORMAT = '!IHH'  # unsigned int, unsigned short, unsigned short
-HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+# v.SERVER_HEADER_FORMAT = '!IHHI'  # unsigned int, unsigned short, unsigned short
+# HEADER_SIZE = struct.calcsize(v.SERVER_HEADER_FORMAT)
+# CLIENT_HEADER_FORMAT = '!IHH'
+# CLIENT_HEADER_SIZE = struct.calcsize(CLIENT_HEADER_FORMAT)
 
 # ประเภทข้อความ
-MSG_LOGIN = 1
-MSG_LOGIN_RESULT = 2
-MSG_NORMAL = 3
-MSG_GAME_ACTION = 4
-MSG_GAME_RESULT = 5
-MSG_LIST_ROOMS = 6
-MSG_JOIN_ROOM = 7
-MSG_PLAYER_QUIT = 8
+# v.MSG_LOGIN = 1
+# v.MSG_LOGIN_RESULT = 2
+# v.MSG_NORMAL = 3
+# v.MSG_GAME_ACTION = 4
+# v.MSG_GAME_RESULT = 5
+# v.MSG_LIST_ROOMS = 6
+# v.MSG_JOIN_ROOM = 7
+# v.MSG_PLAYER_QUIT = 8
 
 # เกม Rock Paper Scissors
-GAME_CHOICES = ['rock', 'paper', 'scissors']
+# GAME_CHOICES = ['rock', 'paper', 'scissors']
 game_rooms = {}  # {room_id: {'players': [player1, player2], 'choices': {}, 'status': 'waiting'/'playing'}}
 
-def create_header(message_type, payload_length):
+
+
+def create_header(message_type, payload_length, status_code=200):
     version = 1
-    return struct.pack(HEADER_FORMAT, version, message_type, payload_length)
+    return struct.pack(v.SERVER_HEADER_FORMAT, version, message_type, payload_length, status_code)
 
 def parse_header(header_data):
-    return struct.unpack(HEADER_FORMAT, header_data)
+    return struct.unpack(v.CLIENT_HEADER_FORMAT, header_data)
 
 def load_users():
     users = {}
     with open('users.csv', 'r') as file:
         csv_reader = csv.reader(file)
-        next(csv_reader)  # ข้าม header
+        next(csv_reader)
         for row in csv_reader:
             users[row[0]] = row[1]
     return users
 
+def save_user(username, password):
+    with open('users.csv', 'a', newline='') as file:
+        csv_writer = csv.writer(file)
+        csv_writer.writerow([username, password])
+
+def handle_register(payload):
+    username, password = payload.split(',')
+    if username in users:
+        return "Username already exists", 409 
+    else:
+        save_user(username, password)
+        users[username] = password  
+        return "Registration successful", 201  
+    
 def check_login(username, password, users):
     return username in users and users[username] == password
 
@@ -87,7 +105,7 @@ def handle_game_action(username, action, room_id):
         else:
             return "Waiting for another player to join.", [username]
         
-    if action not in GAME_CHOICES:
+    if action not in v.GAME_CHOICES:
         return "Invalid choice. Please choose rock, paper, or scissors.", [username]
     
     room['choices'][username] = action
@@ -127,15 +145,15 @@ def handle_client(conn, addr):
     try:
         while True:
             try:
-                header_data = conn.recv(HEADER_SIZE)
-                if not header_data or len(header_data) < HEADER_SIZE:
+                header_data = conn.recv(v.CLIENT_HEADER_SIZE)
+                if not header_data or len(header_data) < v.CLIENT_HEADER_SIZE:
                     print(f"Invalid header from {addr}. Closing connection.")
                     break
                 
                 version, message_type, payload_length = parse_header(header_data)
                 payload = conn.recv(payload_length).decode()
                 
-                if message_type == MSG_LOGIN:
+                if message_type == v.MSG_LOGIN:
                     username, password = payload.split(',')
                     login_success = check_login(username, password, users)
                     if login_success:
@@ -143,19 +161,24 @@ def handle_client(conn, addr):
                         logged_in_user = username
                         active_users[conn] = username
                         print(f"User '{username}' logged in")
+                        status_code = 200
                     else:
                         response = "Login failed"
+                        status_code = 401
                     
-                    header = create_header(MSG_LOGIN_RESULT, len(response))
+                    header = create_header(v.MSG_LOGIN_RESULT, len(response), status_code)
                     conn.sendall(header + response.encode())
-                
-                elif message_type == MSG_LIST_ROOMS:
+                elif message_type == v.MSG_REGISTER:
+                    response, status_code = handle_register(payload)
+                    header = create_header(v.MSG_NORMAL, len(response), status_code)
+                    conn.sendall(header + response.encode())
+                elif message_type == v.MSG_LIST_ROOMS:
                     available_rooms = get_available_rooms()
                     response = ','.join(map(str, available_rooms))
-                    header = create_header(MSG_NORMAL, len(response))
+                    header = create_header(v.MSG_NORMAL, len(response))
                     conn.sendall(header + response.encode())
                 
-                elif message_type == MSG_JOIN_ROOM:
+                elif message_type == v.MSG_JOIN_ROOM:
                     if logged_in_user:
                         if payload == "create":
                             user_room = create_new_room(logged_in_user)
@@ -173,10 +196,10 @@ def handle_client(conn, addr):
                                 response = "Failed to join room"
                     else:
                         response = "Please login first"
-                    header = create_header(MSG_NORMAL, len(response))
+                    header = create_header(v.MSG_NORMAL, len(response))
                     conn.sendall(header + response.encode())
                 
-                elif message_type == MSG_GAME_ACTION:
+                elif message_type == v.MSG_GAME_ACTION:
                     if logged_in_user:
                         user_room = None
                         for room_id, room in game_rooms.items():
@@ -188,36 +211,38 @@ def handle_client(conn, addr):
                             result, players_to_notify = handle_game_action(logged_in_user, payload, user_room)
                             print(f"Game action from {logged_in_user} in room {user_room}: {payload}")
                             
-                            if len(players_to_notify) == 2:  # ทั้งสองคนเลือกแล้ว
+                            if len(players_to_notify) == 2: 
                                 print(f"Result: {result}")
                                 for player in players_to_notify:
                                     player_conn = next((conn for conn, user in active_users.items() if user == player), None)
                                     if player_conn:
-                                        header = create_header(MSG_GAME_RESULT, len(result))
+                                        header = create_header(v.MSG_GAME_RESULT, len(result))
                                         player_conn.sendall(header + result.encode())
-                            else:  # รอผู้เล่นอีกคน
-                                header = create_header(MSG_NORMAL, len(result))
+                            else:  
+                                header = create_header(v.MSG_NORMAL, len(result))
                                 conn.sendall(header + result.encode())
                         else:
                             response = "You need to join a game room first"
-                            header = create_header(MSG_NORMAL, len(response))
+                            header = create_header(v.MSG_NORMAL, len(response))
                             conn.sendall(header + response.encode())
                     else:
                         response = "You need to login first"
-                        header = create_header(MSG_NORMAL, len(response))
+                        header = create_header(v.MSG_NORMAL, len(response))
                         conn.sendall(header + response.encode())
                 
-                elif message_type == MSG_NORMAL:
+                elif message_type == v.MSG_NORMAL:
                     if logged_in_user:
                         print(f"ข้อความจาก {logged_in_user} ({addr}): {payload}")
                         response = f"Server received: {payload}"
+                        status_code = 200
                     else:
                         print(f"ข้อความจากผู้ใช้ที่ไม่ได้ login ({addr}): {payload}")
                         response = "Please login first"
+                        status_code = 401
                     
-                    header = create_header(MSG_NORMAL, len(response))
+                    header = create_header(v.MSG_NORMAL, len(response), status_code)
                     conn.sendall(header + response.encode())
-                elif message_type == MSG_PLAYER_QUIT:
+                elif message_type == v.MSG_PLAYER_QUIT:
                     if logged_in_user and user_room:
                         room = game_rooms[user_room]
                         room['players'].remove(logged_in_user)
@@ -226,16 +251,16 @@ def handle_client(conn, addr):
                             remaining_conn = next((c for c, u in active_users.items() if u == remaining_player), None)
                             if remaining_conn:
                                 quit_message = f"{logged_in_user} has left the game. Waiting for a new player..."
-                                header = create_header(MSG_NORMAL, len(quit_message))
+                                header = create_header(v.MSG_NORMAL, len(quit_message))
                                 remaining_conn.sendall(header + quit_message.encode())
                         elif len(room['players']) == 0:
                             del game_rooms[user_room]
                         response = "You have left the game."
                     else:
                         response = "You are not in a game."
-                    header = create_header(MSG_NORMAL, len(response))
+                    header = create_header(v.MSG_NORMAL, len(response))
                     conn.sendall(header + response.encode())
-                    break  # ออกจากลูป while เพื่อปิดการเชื่อมต่อ
+                    # break  # ออกจากลูป while เพื่อปิดการเชื่อมต่อ
             except ConnectionResetError:
                 print(f"การเชื่อมต่อถูกปิดอย่างไม่คาดคิดจาก {addr}")
                 break
@@ -255,7 +280,7 @@ def handle_client(conn, addr):
                         remaining_conn = next((c for c, u in active_users.items() if u == remaining_player), None)
                         if remaining_conn:
                             quit_message = f"{logged_in_user} has disconnected. Waiting for a new player..."
-                            header = create_header(MSG_NORMAL, len(quit_message))
+                            header = create_header(v.MSG_NORMAL, len(quit_message))
                             remaining_conn.sendall(header + quit_message.encode())
                     elif len(room['players']) == 0:
                         del game_rooms[user_room]
