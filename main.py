@@ -2,26 +2,9 @@ import socket
 import struct
 import time
 import var as v
-# การกำหนดค่าการเชื่อมต่อ
+
 HOST = '127.0.0.1'
 PORT = 12345
-
-# กำหนดโครงสร้าง header
-# v.CLIENT_HEADER_FORMAT = '!IHH'  # unsigned int, unsigned short, unsigned short
-# SERVER_HEADER_FORMAT = '!IHHI'
-# HEADER_SIZE = struct.calcsize(v.CLIENT_HEADER_FORMAT)
-# v.SERVER_HEADER_SIZE = struct.calcsize(v.SERVER_HEADER_FORMAT)
-
-# ประเภทข้อความ
-# v.MSG_LOGIN = 1
-# v.MSG_LOGIN_RESULT = 2
-# v.MSG_NORMAL = 3
-# v.MSG_GAME_ACTION = 4
-# v.MSG_GAME_RESULT = 5
-# v.MSG_LIST_ROOMS = 6
-# v.MSG_JOIN_ROOM = 7
-# v.MSG_PLAYER_QUIT = 8
-# GAME_CHOICES = ['rock', 'paper', 'scissors']
 
 def create_header(message_type, payload_length):
     version = 1
@@ -65,10 +48,10 @@ def list_and_choose_room(sock):
 
     else:
         print("\nAvailable rooms:")
-        print("=" * 30)  # Horizontal line for separation
+        print("=" * 30) 
         for idx, room in enumerate(available_rooms, start=1):
             print(f"Room {room}")
-        print("=" * 30)  # Horizontal line for separation
+        print("=" * 30)  
         
         while True:
             choice = input("Enter room number to join, or press Enter to create a new room or 'back' to menu: ")
@@ -195,21 +178,6 @@ def main():
                     break
                 else:
                     print("Invalid choice. Please select 1, 2, 3, or 4.")
-            # logged_in = False
-            # while not logged_in:
-            #     logged_in = login(s)
-            #     if not logged_in:
-            #         print("Login failed. Please try again.")
-            
-            # print("You are now logged in!")
-            # room_choice = list_and_choose_room(s)
-            # version, resp_type, status_code, response = send_message(s, v.MSG_JOIN_ROOM, str(room_choice))
-
-            # if "Joined room" in response or "Created and joined room" in response:
-            #     print(f"\nRPS-Net: {status_code} - {v.STATUS_CODES[status_code]} - {response}")
-            #     play_game(s)
-            # else:
-            #     print("Failed to join or create a room.")
             
         except ConnectionRefusedError:
             print("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้")

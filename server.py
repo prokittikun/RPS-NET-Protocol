@@ -4,28 +4,10 @@ import csv
 import threading
 import var as v
 
-# การกำหนดค่าเซิร์ฟเวอร์
 HOST = '127.0.0.1'
 PORT = 12345
 
-# กำหนดโครงสร้าง header
-# v.SERVER_HEADER_FORMAT = '!IHHI'  # unsigned int, unsigned short, unsigned short
-# HEADER_SIZE = struct.calcsize(v.SERVER_HEADER_FORMAT)
-# CLIENT_HEADER_FORMAT = '!IHH'
-# CLIENT_HEADER_SIZE = struct.calcsize(CLIENT_HEADER_FORMAT)
 
-# ประเภทข้อความ
-# v.MSG_LOGIN = 1
-# v.MSG_LOGIN_RESULT = 2
-# v.MSG_NORMAL = 3
-# v.MSG_GAME_ACTION = 4
-# v.MSG_GAME_RESULT = 5
-# v.MSG_LIST_ROOMS = 6
-# v.MSG_JOIN_ROOM = 7
-# v.MSG_PLAYER_QUIT = 8
-
-# เกม Rock Paper Scissors
-# GAME_CHOICES = ['rock', 'paper', 'scissors']
 game_rooms = {}  # {room_id: {'players': [player1, player2], 'choices': {}, 'status': 'waiting'/'playing'}}
 
 
@@ -114,7 +96,7 @@ def handle_game_action(username, action, room_id):
         return "Waiting for other player's choice...", [username]
     elif len(room['choices']) == 2:
         result = determine_winner(room)
-        room['choices'] = {}  # Reset choices for next round
+        room['choices'] = {} 
         return result, room['players']
 
 def determine_winner(room):
@@ -134,7 +116,7 @@ def determine_winner(room):
     else:
         result += f"{players[1]} wins!"
     
-    # room['choices'] = {}  # Reset choices for next round
+    # room['choices'] = {}  
     return result
 
 def handle_client(conn, addr):
